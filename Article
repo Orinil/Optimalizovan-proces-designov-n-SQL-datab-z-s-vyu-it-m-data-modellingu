@@ -1,0 +1,66 @@
+Optimalizovaný proces designování SQL databází s využitím data modellingu
+
+Tento dokument se zamýšlí nad efektivním nastavením SQL databází při jejich designování. Jsou představeny čtyři stupně data modelling a koncepty nastavování indexů (včetně příkladů jejich užití). Neslouží ale jako návod pro začátečníky. Předpokládá se základní až mírně pokročilá znalost SQL databází a jejich designování.
+
+Proces designování databáze je naprosto klíčový pro její správnou optimalizaci na zadané funkcionality.  I když by se mohlo zdát, že po vytvoření databáze žádné problémy nenastaly, musíme počítat s jejím rozšiřováním v průběhu používání klientem. 
+Špatně navržená a optimalizovaná databáze může velice snadno vyústit v situace, kdy zpracování stored procedure musí mít stovky-tisíce řádků kódu a jednoduché/středně složité queries zaberou i několik minut.
+
+Data modelling je proces, díky kterému lépe a přehledněji vytvoříme mapu databáze, kterou hodláme vybudovat. Data modeling zahrnuje čtyři kroky, které (pokud jsou zvládnuté profesionálně) zajistí vytvoření optimální databáze přesně podle potřeb klienta.
+
+1) Krok 1 - Analýza potřeb klienta
+Hned první krok analýza potřeb klienta bývá trochu neprávem při tvorbě nových databází (nebo i úpravě starých) opomíjen. Ano, zabírá to mnoho času a často je potřeba opakovaně mluvit s několika různými lidmi na straně klienta, abychom získali potřebné specifikace. Dle mého názoru ale díky analýze potřeb klienta získáme lepší předpoklady pro vybudování opravdu kvalitní databáze, která bude mít vyhovující scaling.
+V případě, že už existuje nějaká stará databáze (nebo jiné materiály), rozhodně je moudré je při tvorbě nové databáze použít. Ať už jako referenci, jako pozitivní, nebo i jako negativní příklad.
+Klíčové je získat přesné informace o tom, jaká data budou v databázi ukládána, kolik jich přibližně bude, jakým způsobem budou updatována a podobně. V rámci optimalizace je velice důležité pravidlo nesnažit se dvou databázi navrhnout co nejobecnější. Právě tyto snahy (i když jsou dobře myšleny) vedou k tvorbě neoptimalizovaných databází.
+Proces návrhu databází vybízí k co největší obecnosti a řešení problémů, které ještě nenastaly a nastat ani nikdy nemusí. Naše databáze pak teoreticky bude adaptibilní na mnoho scénářů a situací. Kvůli tomu pak vznikají robustní databáze s velkým množstvím nevyužitých funkcí. 
+Proto je velmi nutné nepřeskočit tento první krok – analýza potřeb klienta. Úkolem dobrého vývojáře je nastavit produkt podle přání klienta. Všechny sporné funkcionality je potřeba se zákazníkem řešit (od očekáváné délky strings, integers, až po požadované sloupce v tabulkách). Jednoduše nikdy nesmíme zapomínat na kontext problému.
+Pokud si za nějakou dobu zákazník bude chtít funkcionalitu do databáze doplnit, vždy se můžeme vrátit a provést změny. Kdybychom ale tvořili databázi, která je připravena „na všechno“, prohráli jsme už na začátku tak jako tak. Protože bude ze své podstaty zbytečně robustní a pomalá.
+
+2) Krok 2 – Conceptual model
+Tento krok v ideálním případě navazuje na ten předchozí. Naším cílem je vytvořit grafický přehled, ve kterém budou hrubě znázorněny entity v databázi a vztah mezi nimi. 
+Cílem by mělo zejména být zajistit komunikaci mezi námi a klientem, který si databázi přeje vytvořit. Důležité je zmínit, že tento model se v žádném případě netvoří v database management systemu. Používáme na to externí nástroje.
+Pro vizualizaci těchto konceptů můžeme použít buď UML, nebo entity relationship (ER). Já osobně preferuji ER, protože není zbytečně robustní a pro potřeby conceptual model naprosto stačí.
+Máme několik možností. Pro Windows prostředí existuje Microsoft Visio. Online pak draw.io, nebo například LucidCharts. Osvědčila se mi práce s draw.io, protože toto rozhraní je přehledné a snadné na používání. Pro potřeby conceptual model je naprosto dostačující záložka „Entity Relation“. 
+V prvním kroku je nutné definovat si dvě základní entity, které mezi sebou v databázi budou mít vztah. Kdybychom například tvořili databázi k on-line portálu na bookování letenek, základní entity by mohly být:
+ 
+Pro názornost jsou v conceptual models vždy voleny many-to-many relationship links. 
+Toto je velice základní model, ve kterém je mnoho problémů. Ani nejsou definované datatypes. To ale v tuto chvíli nevadí, protože úkolem conceptual modelu není vytvořit perfektní návrh řešení. Slouží k nastínění základních vztahů mezi entitami a ke komunikaci s klientem. Mohli bychom to s trochou nadsázky vnímat jako klasický brainstorming.
+
+3) Krok 3 – Logical model
+Logical model je přímo závislý na formě conceptual modelu. V ideálním případě pouze vezmeme náš conceptual model a přetransformujeme ho. Ten musí být více rafinovaný, více detailní a vazby mezi jednotlivými entitami musí být lépe definované.
+Prvním úkolem je do závorek nadefinovat, o jaký typ dat jde. Pořád ale obecně. Kolonka „name“ tak bude označena jako string, ne jako VARCHAR(50). Důležité ale je si uvědomit, že ani logical model by neměl být navrhován v prostředí SQL database management systemu. 
+ 
+Dále na řadu přichází rozvinutí obecných kolonek, které jsme do conteptual modelu zadali. Pro identifikaci zákazníka (i podle First normal form) je tak například nutné rozdělit kolonku „name“ na „firstName“ (string) a „lastName“ (string). Podobně je to i typicky u adresy.
+V případě logical modelu už je třeba správně definovat vazby mezi jednotlivými entitami databáze (tedy one-to-one, one-to-many, nebo many-to-many). V uvedeném příkladu se jedná o one-to-many relationship. Jeden klient může mít více letenek, ale jedna letenka nemůže mít více klientů.
+ 
+Pro správné fungování databáze podle požadavků klienta je nezbytné získat i dodatečné informace, které v modelu nejsou. Jde například o datum, kdy proběhl booking letenky („bookDate“). Tento údaj ale nemůžeme zařadit do entity „Ticket“ („bookDate“ není pouze jeden pro všechny letenky) ani do entity „Client“ (jeden pasažér může mít více bookingů – takže bychom potřebovali další zbytečnou identifikaci unikátního bookingu). Údaj o „bookDate“ totiž patří pod „Books“ entity, která v modelu výše figuruje jen jako spojnice mezi klientem a letenkou. 
+Správné identifikování takových situací je při vytváření SQL databází velice důležité. Nezkušený vývojář může snadno udělat chybu, kvůli které bude v budoucnu nutné do databáze zasahovat na fundamentální úrovni.
+ 
+
+4) Krok 4 – Physical model
+Physical model je přímou implementací logical modelu do database management systemu. Už potřebujeme mít definované data types, default values, primary keys, nadefinovanou přípustnost null values. 
+První akcí by mělo být převést entity z logical modelu do samotného návrhu databáze (sekce „New model“ v MySQL). Pro zachování rozumné míry abstrakce a konzistentnosti je dobré tabulky pojmenovávat v množném čísle.
+V první fázi stačí pouhé převedení tabulek z logical modelu do prostředí database management enginu. Nyní už ale nastavujeme základní atributy i data types.
+ 
+Po převedení projektu do database management systemu je čas na definování primary keys (tedy unikátního identifikátoru pro každý řádek v tabulce). Pro určování Primary key existuje několik základních pravidel. Měl by být unikátní (možno použít i composite primary key), měl by zůstat stejný i v budoucnosti a měl by být dostatečně krátký. Budeme ho totiž opisovat v jiných tabulkách. Proto není vhodné jako primary key využívat email (může být velice dlouhý a může se měnit). Z těchto důvodů je třeba zavést nový řádek v tabulce – „client_id“. Primary key je logicky pokládán za not null. Volitelně se doporučuje zvolit i AI (auto-increment) v situacích, které to umožňují.
+Po zvolení parent-child vztahu mezi tabulkami se musíme rozhodnout, jestli v tabulce budeme získaný foreign key (tedy odkaz na unikátní řádek z parent table) používat i jako primary key v této child tabulce. Pokud ano, muselo by to být v kombinaci s jiným unikátním řádkem. Vznikl by tak composite primary key („client_id“ + „ticket_id“). Druhou možností je zavedení standardního nového unikátního řádku booking_id.
+Použití composite primary key je nevýhodné kvůli možnosti další tabulky v budoucnu, která může mít „Bookings“ tabulku jako parent. Obě složky compiseite primary key by pak musely být zopakovány i v této nové tabulce. Vzhledem k tomu, že je ale naším cílem zajistit co nejlepší optimalizaci databáze dle zadání klienta, je lepší composite primary key využít. Pokud se v budoucnosti situace změní, můžeme se vrátit a nastavení upravit. V současné chvíli jsme ale se stoprocentní jistotou ušetřili trochu operační paměti našeho systému.
+ 
+U foreign keys je dále nutné nastavit automatické chování systému v případě, kdy primary key je smazán nebo změněn. V MySQL máme na oba případy zvláštní volbu, která je z defaultního nastavení zvolena na „NO ACTION“. Tedy při smazání, nebo změně primary key nebude foreign key nijak ovlivněn. 
+Naše optimální nastavení závisí na specifické situaci, kterou řešíme. Obecně je ale dobré nastavit chování při „UPDATE“ na „CASCADE“ (tedy že se update promítne i do child table) a chování u „DELETE“ na „NO ACTION“ (protože bychom mohli ztratit důležitá data například pro analytiku, nebo kdyby se původní data v parent table obnovila). 
+
+5) Krok 5 - Indexy:
+Pro optimální nastavení robustních databází jsou mimo výše uvedených kroků rovněž klíčové také indexy. Ty by se neměly zavádět u každé tabulky, každého query. Nastavení indexu zvyšuje celkovou velikost naší databáze a „UPDATE“, „DELETE“ statementy ovlivňují nejen tabulky, ale i indexy.
+Chybou začínajících developerů je nastavovat indexy už během procesu vytváření tabulek. Indexy se tedy nastavují v závislosti na queries, ne tables.
+Pokud máme tu možnost, je vždy lepší nastavovat index na čísla (např. int). Nezabírají pak tolik místa v paměti. Když už musíme nastavovat indexy na string, je vhodné je omezit na prefix, tedy:
+ 
+Při zvolení čísla je naším cílem správně odhadnout optimální počet písmen k identifikování unikáních hodnot ve stringu. Existuje na to mnoho postupů a tento je jeden z vhodných:
+ 
+Zároveň je ve vhodných situacích lepší nastavit jeden composite index než dva běžné (pokud to v situaci dává smysl). Composite index je rychlejší a v paměti nezabírá tolik místa jako dva běžné. Jen ve výjimečných případech bychom ale měli jít přes 4 – 6. 
+Ohledně pořadí sloupců v composite indexu je dobré dodržovat pravidlo vkládání sloupců s vyšší schopností filtrace výsledků na první místo (např. kolonka pohlaví vyřadí přibližně 50 % výsledků). Dále bychom měli hledět na cardinality. Čím větší cardinality, tím dříve by měly být postaveny v composite indexu. Nakonec je to ale stejně otázka konkrétního query. Měli bychom vždy manuálně zhodnotit, jestli je naše nastavení vhodné a dává smysl. Pokud ne, jednoduše budeme ignorovat výše zmíněné doporučení a nastavíme index, jak nejlépe umíme.
+Pro kontrolu efektivity zvoleného postupu můžeme si ověřit cenu query.
+  
+
+
+Výborné publikace na prohloubení znalostí k tomuto tématu jsou:
+Schwartz, Baron, and Peter Zaitsev. High Performance MySQL: Optimization, Backups, and Replication. O'Reilly Media, 2008.
+Lahdenmaki, Tapio, and Michael Leach. Relational Database Index Design and the Optimizers. John Wiley & Sons, Inc., 2005.
